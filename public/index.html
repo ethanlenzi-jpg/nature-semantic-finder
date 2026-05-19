@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nature Semantic Finder</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <section class="search-panel">
+        <div class="brand-row">
+          <div>
+            <p class="eyebrow">Research article finder</p>
+            <h1>Nature Semantic Finder</h1>
+          </div>
+          <div class="status-pill" id="modePill">Hybrid metadata ranking</div>
+        </div>
+
+        <form id="searchForm">
+          <label for="question">Research question</label>
+          <textarea id="question" name="question" rows="4" placeholder="Example: How does gut microbiome diversity affect checkpoint inhibitor response?"></textarea>
+
+          <div class="controls">
+            <label class="toggle">
+              <input type="checkbox" id="natureOnly" checked>
+              <span>Nature-family only</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="useEmbeddings">
+              <span>Use OpenAI semantic embeddings</span>
+            </label>
+          </div>
+
+          <div class="key-row" id="keyRow" hidden>
+            <label for="openAiKey">OpenAI API key</label>
+            <input id="openAiKey" type="password" autocomplete="off" placeholder="Stored only in this browser">
+          </div>
+
+          <details class="access-box">
+            <summary>Nature access</summary>
+            <p>This app cannot unlock paywalled Nature text with your account password. Use article links after signing in on nature.com, or add an API key/proxy if your institution provides one.</p>
+            <label for="springerApiKey">Springer Nature API key</label>
+            <div class="api-key-row">
+              <input id="springerApiKey" type="password" autocomplete="off" placeholder="Optional; stored only in this browser">
+              <button type="button" id="testSpringerKey">Test key</button>
+            </div>
+            <div id="springerKeyStatus" class="key-status" role="status"></div>
+            <label for="proxyPrefix">Institution proxy prefix</label>
+            <input id="proxyPrefix" type="url" autocomplete="off" placeholder="Example: https://login.proxy.school.edu/login?url=">
+            <a class="login-link" href="https://www.nature.com/nams/svc/login" target="_blank" rel="noreferrer">Sign in on Nature</a>
+          </details>
+
+          <button type="submit" id="searchButton">Find articles</button>
+        </form>
+      </section>
+
+      <section class="results-shell">
+        <div class="results-header">
+          <div>
+            <p class="eyebrow">Ranked results</p>
+            <h2 id="resultTitle">Ask a question to begin</h2>
+          </div>
+          <div class="candidate-count" id="candidateCount"></div>
+        </div>
+        <div id="message" class="message">Results include article links you can open after signing in to Nature in this browser.</div>
+        <section id="answerPanel" class="answer-panel" hidden></section>
+        <div id="results" class="results"></div>
+      </section>
+    </main>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
