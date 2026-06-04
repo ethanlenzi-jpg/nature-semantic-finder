@@ -119,7 +119,10 @@ label {
 
 textarea,
 input[type="password"],
-input[type="url"] {
+input[type="url"],
+input[type="text"],
+input[type="number"],
+select {
   width: 100%;
   border: 1px solid #cbd4d0;
   border-radius: 8px;
@@ -133,7 +136,10 @@ input[type="url"] {
 
 textarea:focus,
 input[type="password"]:focus,
-input[type="url"]:focus {
+input[type="url"]:focus,
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
   outline: 3px solid rgba(215, 25, 32, 0.16);
   border-color: var(--accent);
 }
@@ -165,6 +171,7 @@ input[type="url"]:focus {
   display: none;
 }
 
+.filter-box,
 .access-box {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -172,9 +179,73 @@ input[type="url"]:focus {
   background: #fbfcfb;
 }
 
+.filter-box summary,
 .access-box summary {
   cursor: pointer;
   font-weight: 800;
+}
+
+.filter-box {
+  display: grid;
+  gap: 12px;
+}
+
+.mode-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mode-control label,
+.check-row {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #fff;
+  font-weight: 750;
+}
+
+.mode-control input,
+.check-row input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.filter-grid label {
+  font-size: 0.84rem;
+}
+
+.range-row {
+  display: grid;
+  grid-template-columns: 1fr 48px;
+  gap: 10px;
+  align-items: center;
+}
+
+.range-row input {
+  accent-color: var(--accent);
+}
+
+.range-row output {
+  color: var(--accent-strong);
+  font-size: 0.84rem;
+  font-weight: 800;
+  text-align: right;
 }
 
 .access-box p {
@@ -477,6 +548,11 @@ button:disabled {
   }
 
   .api-key-row {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-control,
+  .filter-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -142,6 +142,13 @@ def strip_tags(text):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text or "")).strip()
 
 
+def safe_int(value):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def normalize_springer(record):
     doi = f"https://doi.org/{record.get('doi')}" if record.get("doi") else ""
     urls = record.get("url") or []
@@ -160,8 +167,9 @@ def normalize_springer(record):
         "doi": doi,
         "url": article_url or doi,
         "authors": [creator.get("creator") for creator in (record.get("creators") or [])[:6] if creator.get("creator")],
-        "citationCount": 0,
+        "citationCount": safe_int(record.get("citationCount") or record.get("citedByCount") or record.get("citedbycount")),
         "openAccess": str(record.get("openaccess") or "").lower() == "true",
+        "articleType": record.get("articleType") or "",
         "concepts": [value for value in (record.get("subject"), record.get("articleType")) if value],
         "source": "Springer Nature",
     }
@@ -221,8 +229,11 @@ def search_semantic_scholar(query, limit):
     return [normalize_semantic_scholar(paper) for paper in body.get("data", [])]
 
 
-def rank(query, papers):
-    query_tokens = set(tokenize(expand_query(query)))
+def rank(query, papers, filters=None):
+    filters = filters or {}
+    mode = filters.get("mode") or "semantic"
+    citation_influence = clamp(float(filters.get("citationWeight") or 0) / 100, 0, 1)
+    query_tokens = set(tokenize(query if mode == "keywords" else expand_query(query)))
     ranked = []
     for paper in papers:
         haystack = f"{paper.get('title', '')} {paper.get('abstract', '')} {paper.get('venue', '')} {' '.join(paper.get('concepts', []))}"
@@ -230,15 +241,26 @@ def rank(query, papers):
         title_tokens = set(tokenize(paper.get("title", "")))
         overlap = len(query_tokens & doc_tokens)
         title_overlap = len(query_tokens & title_tokens)
+        exact_phrase = query.lower() in haystack.lower()
         abstract_depth = clamp(len(paper.get("abstract", "")) / 900, 0, 1)
         citation_signal = clamp(math.log10((paper.get("citationCount") or 0) + 1) / 4, 0, 1)
         recency_signal = clamp(((paper.get("year") or 2000) - 2000) / 26, 0, 1)
-        nature_boost = 0.15 if is_nature_family(paper) else 0
+        nature_boost = 0.15
+        if mode == "keywords":
+            text_score = (
+                clamp(overlap / max(1, len(query_tokens)), 0, 1) * 0.68
+                + (0.22 if exact_phrase else 0)
+                + clamp(title_overlap / max(1, len(query_tokens)), 0, 1) * 0.1
+            )
+        else:
+            text_score = (
+                clamp(overlap / max(8, len(query_tokens)), 0, 1) * 0.55
+                + clamp(title_overlap / max(3, len(query_tokens)), 0, 1) * 0.18
+            )
         score = (
-            clamp(overlap / max(8, len(query_tokens)), 0, 1) * 0.55
-            + clamp(title_overlap / max(3, len(query_tokens)), 0, 1) * 0.18
+            text_score * (1 - citation_influence * 0.35)
             + abstract_depth * 0.1
-            + citation_signal * 0.08
+            + citation_signal * (0.08 + citation_influence * 0.35)
             + recency_signal * 0.04
             + nature_boost
         )
@@ -246,15 +268,46 @@ def rank(query, papers):
         reasons = []
         if matched:
             reasons.append(f"matches concepts around {', '.join(matched)}")
+        if mode == "keywords":
+            reasons.append("ranked by exact-word overlap")
         if paper.get("abstract"):
             reasons.append("has abstract-level evidence for screening")
-        if is_nature_family(paper):
-            reasons.append("comes from a Nature-family venue")
+        if (paper.get("citationCount") or 0) > 0 and citation_influence > 0:
+            reasons.append("citation count influenced ranking")
+        reasons.append("comes from Springer Nature metadata")
         paper = dict(paper)
         paper["score"] = round(clamp(score, 0, 1), 3)
         paper["relevance"] = "; ".join(reasons) or "related by metadata and venue context"
         ranked.append(paper)
     return sorted(ranked, key=lambda item: item["score"], reverse=True)
+
+
+def apply_filters(papers, filters):
+    filters = filters or {}
+    author = (filters.get("author") or "").lower()
+    journal = (filters.get("journal") or "").lower()
+    article_type = (filters.get("articleType") or "").lower()
+    from_year = filters.get("fromYear")
+    to_year = filters.get("toYear")
+    open_access_only = bool(filters.get("openAccessOnly"))
+
+    filtered = []
+    for paper in papers:
+        if author and not any(author in name.lower() for name in paper.get("authors", [])):
+            continue
+        if journal and journal not in (paper.get("venue") or "").lower():
+            continue
+        if from_year and (not paper.get("year") or paper.get("year") < int(from_year)):
+            continue
+        if to_year and (not paper.get("year") or paper.get("year") > int(to_year)):
+            continue
+        type_text = f"{paper.get('articleType', '')} {' '.join(paper.get('concepts', []))}".lower()
+        if article_type and article_type not in type_text:
+            continue
+        if open_access_only and not paper.get("openAccess"):
+            continue
+        filtered.append(paper)
+    return filtered
 
 
 def split_sentences(text):
@@ -362,6 +415,7 @@ class Handler(BaseHTTPRequestHandler):
 
         limit = max(10, min(80, int(payload.get("limit") or 60)))
         springer_api_key = (payload.get("springerApiKey") or "").strip()
+        filters = payload.get("filters") or {}
         source_errors = []
         papers = []
         try:
@@ -377,11 +431,13 @@ class Handler(BaseHTTPRequestHandler):
                 seen.add(key)
                 unique.append(paper)
 
-        results = rank(query, unique)[:20]
+        unique = apply_filters(unique, filters)
+
+        results = rank(query, unique, filters)[:20]
         answer = build_answer(query, results)
         self.send_json(200, {
             "query": query,
-            "rankingMode": "Springer Nature metadata ranking",
+            "rankingMode": "Springer Nature exact-word ranking" if filters.get("mode") == "keywords" else "Springer Nature semantic ranking",
             "totalCandidates": len(unique),
             "sourceErrors": source_errors,
             "answer": answer,

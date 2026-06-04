@@ -22,6 +22,47 @@
           <label for="question">Question for Nature journals</label>
           <textarea id="question" name="question" rows="4" placeholder="Example: How does gut microbiome diversity affect checkpoint inhibitor response?"></textarea>
 
+          <details class="filter-box" open>
+            <summary>Search controls</summary>
+            <div class="mode-control" role="radiogroup" aria-label="Search mode">
+              <label>
+                <input type="radio" name="searchMode" value="semantic" checked>
+                <span>Semantic</span>
+              </label>
+              <label>
+                <input type="radio" name="searchMode" value="keywords">
+                <span>Exact words</span>
+              </label>
+            </div>
+            <div class="filter-grid">
+              <label for="authorFilter">Author</label>
+              <input id="authorFilter" type="text" autocomplete="off" placeholder="Example: Jennifer Doudna">
+              <label for="journalFilter">Journal</label>
+              <input id="journalFilter" type="text" autocomplete="off" placeholder="Example: Nature Medicine">
+              <label for="fromYear">From year</label>
+              <input id="fromYear" type="number" inputmode="numeric" min="1869" max="2100" placeholder="2018">
+              <label for="toYear">To year</label>
+              <input id="toYear" type="number" inputmode="numeric" min="1869" max="2100" placeholder="2026">
+              <label for="articleTypeFilter">Article type</label>
+              <select id="articleTypeFilter">
+                <option value="">Any type</option>
+                <option value="research">Research</option>
+                <option value="review">Review</option>
+                <option value="news">News</option>
+                <option value="comment">Comment</option>
+              </select>
+              <label class="check-row">
+                <input id="openAccessOnly" type="checkbox">
+                <span>Open access only</span>
+              </label>
+            </div>
+            <label for="citationWeight">Citation influence</label>
+            <div class="range-row">
+              <input id="citationWeight" type="range" min="0" max="100" value="25">
+              <output id="citationWeightValue" for="citationWeight">25%</output>
+            </div>
+          </details>
+
           <details class="access-box" open>
             <summary>Springer Nature access</summary>
             <p>This demo uses Springer Nature metadata only. Add a Springer Nature API key to test the concept against live article records.</p>

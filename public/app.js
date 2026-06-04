@@ -1,5 +1,13 @@
 const form = document.querySelector("#searchForm");
 const question = document.querySelector("#question");
+const authorFilter = document.querySelector("#authorFilter");
+const journalFilter = document.querySelector("#journalFilter");
+const fromYear = document.querySelector("#fromYear");
+const toYear = document.querySelector("#toYear");
+const articleTypeFilter = document.querySelector("#articleTypeFilter");
+const openAccessOnly = document.querySelector("#openAccessOnly");
+const citationWeight = document.querySelector("#citationWeight");
+const citationWeightValue = document.querySelector("#citationWeightValue");
 const springerApiKey = document.querySelector("#springerApiKey");
 const testSpringerKey = document.querySelector("#testSpringerKey");
 const springerKeyStatus = document.querySelector("#springerKeyStatus");
@@ -21,6 +29,11 @@ if (window.location.protocol === "file:") {
 
 springerApiKey.value = localStorage.getItem("natureFinderSpringerApiKey") || "";
 proxyPrefix.value = localStorage.getItem("natureFinderProxyPrefix") || "";
+citationWeightValue.textContent = `${citationWeight.value}%`;
+
+citationWeight.addEventListener("input", () => {
+  citationWeightValue.textContent = `${citationWeight.value}%`;
+});
 
 springerApiKey.addEventListener("input", () => {
   localStorage.setItem("natureFinderSpringerApiKey", springerApiKey.value.trim());
@@ -70,7 +83,7 @@ form.addEventListener("submit", async (event) => {
   results.innerHTML = "";
   answerPanel.hidden = true;
   answerPanel.innerHTML = "";
-  resultTitle.textContent = "Searching article databases";
+  resultTitle.textContent = "Searching Springer Nature records";
   candidateCount.textContent = "";
   showMessage("Searching Springer Nature metadata, then ranking records by conceptual fit.");
 
@@ -89,7 +102,7 @@ form.addEventListener("submit", async (event) => {
     showMessage(error.message, true);
   } finally {
     button.disabled = false;
-    button.textContent = "Find articles";
+    button.textContent = "Search Nature journals";
   }
 });
 
@@ -105,7 +118,9 @@ function renderResults(papers) {
     const venue = paper.venue || "Venue unavailable";
     const abstract = paper.abstract ? truncate(paper.abstract, 520) : "No abstract was available from the public metadata source.";
     const natureHref = makeNatureSearchUrl(paper);
-    const tags = [...new Set([paper.source, paper.openAccess ? "Open access" : "", ...paper.concepts.slice(0, 4)].filter(Boolean))];
+    const citations = Number(paper.citationCount || 0);
+    const citationText = citations > 0 ? `${citations.toLocaleString()} citations` : "";
+    const tags = [...new Set([paper.source, paper.openAccess ? "Open access" : "", paper.articleType || "", citationText, ...paper.concepts.slice(0, 4)].filter(Boolean))];
 
     card.innerHTML = `
       <div class="paper-top">
@@ -128,6 +143,7 @@ function renderResults(papers) {
 async function searchArticles(query) {
   const payload = {
     query,
+    filters: getFilters(),
     springerApiKey: springerApiKey.value.trim(),
     limit: 60
   };
@@ -162,12 +178,12 @@ async function staticSearch(query, payload) {
     }
   }
 
-  const unique = uniqueBy(papers, (paper) => (paper.doi || paper.title || "").toLowerCase());
+  const unique = applyFilters(uniqueBy(papers, (paper) => (paper.doi || paper.title || "").toLowerCase()), payload.filters);
 
-  const ranked = rankPapers(query, unique).slice(0, 20);
+  const ranked = rankPapers(query, unique, payload.filters).slice(0, 20);
   return {
     query,
-    rankingMode: "Springer Nature metadata ranking",
+    rankingMode: payload.filters.mode === "keywords" ? "Springer Nature exact-word ranking" : "Springer Nature semantic ranking",
     totalCandidates: unique.length,
     sourceErrors,
     answer: buildClientAnswer(query, ranked),
@@ -240,48 +256,84 @@ function normalizeSpringerBrowser(record) {
     doi,
     url: articleUrl || doi,
     authors: (record.creators || []).slice(0, 6).map((creator) => creator.creator).filter(Boolean),
-    citationCount: 0,
+    citationCount: Number(record.citationCount || record.citedByCount || record.citedbycount || 0),
     openAccess: String(record.openaccess || "").toLowerCase() === "true",
+    articleType: record.articleType || "",
     concepts: [record.subject, record.articleType].filter(Boolean),
     source: "Springer Nature metadata"
   };
 }
 
-function rankPapers(query, papers) {
-  const queryTokens = new Set(tokenize(`${query} ${expandQueryHints(query)}`));
+function rankPapers(query, papers, filters = getFilters()) {
+  const queryTokens = new Set(tokenize(filters.mode === "keywords" ? query : `${query} ${expandQueryHints(query)}`));
   return papers.map((paper) => {
     const haystack = `${paper.title} ${paper.abstract} ${paper.venue} ${(paper.concepts || []).join(" ")}`;
     const docTokens = new Set(tokenize(haystack));
     const titleTokens = new Set(tokenize(paper.title));
     const overlap = countOverlap(queryTokens, docTokens);
     const titleOverlap = countOverlap(queryTokens, titleTokens);
+    const exactPhrase = String(haystack).toLowerCase().includes(String(query).toLowerCase());
     const abstractDepth = clamp((paper.abstract || "").length / 900, 0, 1);
     const citationSignal = clamp(Math.log10((paper.citationCount || 0) + 1) / 4, 0, 1);
     const recencySignal = paper.year ? clamp((paper.year - 2000) / 26, 0, 1) : 0;
     const natureBoost = 0.15;
+    const citationInfluence = clamp(Number(filters.citationWeight || 0) / 100, 0, 1);
+    const textScore = filters.mode === "keywords"
+      ? clamp(overlap / Math.max(1, queryTokens.size), 0, 1) * 0.68 + (exactPhrase ? 0.22 : 0) + clamp(titleOverlap / Math.max(1, queryTokens.size), 0, 1) * 0.1
+      : clamp(overlap / Math.max(8, queryTokens.size), 0, 1) * 0.55 + clamp(titleOverlap / Math.max(3, queryTokens.size), 0, 1) * 0.18;
     const score =
-      clamp(overlap / Math.max(8, queryTokens.size), 0, 1) * 0.55 +
-      clamp(titleOverlap / Math.max(3, queryTokens.size), 0, 1) * 0.18 +
+      textScore * (1 - citationInfluence * 0.35) +
       abstractDepth * 0.1 +
-      citationSignal * 0.08 +
+      citationSignal * (0.08 + citationInfluence * 0.35) +
       recencySignal * 0.04 +
       natureBoost;
     return {
       ...paper,
       score: Number(clamp(score, 0, 1).toFixed(3)),
-      relevance: explainStaticRelevance(queryTokens, paper)
+      relevance: explainStaticRelevance(queryTokens, paper, filters)
     };
   }).sort((a, b) => b.score - a.score);
 }
 
-function explainStaticRelevance(queryTokens, paper) {
+function explainStaticRelevance(queryTokens, paper, filters = getFilters()) {
   const docTokens = new Set(tokenize(`${paper.title} ${paper.abstract} ${(paper.concepts || []).join(" ")}`));
   const matched = [...queryTokens].filter((token) => docTokens.has(token)).slice(0, 5);
   const reasons = [];
   if (matched.length) reasons.push(`matches concepts around ${matched.join(", ")}`);
+  if (filters.mode === "keywords") reasons.push("ranked by exact-word overlap");
   if (paper.abstract) reasons.push("has abstract-level evidence for screening");
+  if (Number(paper.citationCount || 0) > 0 && Number(filters.citationWeight || 0) > 0) reasons.push("citation count influenced ranking");
   reasons.push("comes from Springer Nature metadata");
   return reasons.join("; ") || "related by metadata and venue context";
+}
+
+function getFilters() {
+  return {
+    mode: document.querySelector('input[name="searchMode"]:checked')?.value || "semantic",
+    author: authorFilter.value.trim(),
+    journal: journalFilter.value.trim(),
+    fromYear: Number(fromYear.value) || null,
+    toYear: Number(toYear.value) || null,
+    articleType: articleTypeFilter.value.trim(),
+    openAccessOnly: openAccessOnly.checked,
+    citationWeight: Number(citationWeight.value) || 0
+  };
+}
+
+function applyFilters(papers, filters) {
+  return papers.filter((paper) => {
+    if (filters.author && !(paper.authors || []).some((author) => includesLoose(author, filters.author))) return false;
+    if (filters.journal && !includesLoose(paper.venue || "", filters.journal)) return false;
+    if (filters.fromYear && (!paper.year || paper.year < filters.fromYear)) return false;
+    if (filters.toYear && (!paper.year || paper.year > filters.toYear)) return false;
+    if (filters.articleType && !includesLoose(paper.articleType || paper.concepts?.join(" ") || "", filters.articleType)) return false;
+    if (filters.openAccessOnly && !paper.openAccess) return false;
+    return true;
+  });
+}
+
+function includesLoose(value, needle) {
+  return String(value || "").toLowerCase().includes(String(needle || "").toLowerCase());
 }
 
 function renderAnswer(answer) {
