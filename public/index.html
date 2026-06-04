@@ -21,6 +21,11 @@
         <form id="searchForm">
           <label for="question">Question for Nature journals</label>
           <textarea id="question" name="question" rows="4" placeholder="Example: How does gut microbiome diversity affect checkpoint inhibitor response?"></textarea>
+          <div class="sample-row" aria-label="Sample searches">
+            <button type="button" data-sample-query="How does gut microbiome diversity affect checkpoint inhibitor response?">Microbiome response</button>
+            <button type="button" data-sample-query="What CRISPR delivery methods are emerging for therapeutic gene editing?">CRISPR delivery</button>
+            <button type="button" data-sample-query="How are climate extremes changing ecosystem resilience?">Climate resilience</button>
+          </div>
 
           <details class="filter-box" open>
             <summary>Search controls</summary>
@@ -90,6 +95,8 @@
           <div class="candidate-count" id="candidateCount"></div>
         </div>
         <div id="message" class="message">Results are drawn from Springer Nature metadata and link back to article pages on nature.com or DOI records.</div>
+        <div id="reviewSummary" class="review-summary" hidden></div>
+        <div id="activeFilters" class="active-filters" hidden></div>
         <section id="answerPanel" class="answer-panel" hidden></section>
         <div id="results" class="results"></div>
       </section>

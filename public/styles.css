@@ -109,6 +109,27 @@ form {
   gap: 16px;
 }
 
+.sample-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sample-row button {
+  min-height: 34px;
+  border: 1px solid #f0c7c9;
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--accent-strong);
+  background: #fff7f7;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.sample-row button:hover {
+  background: #ffecec;
+}
+
 label {
   display: grid;
   gap: 7px;
@@ -348,6 +369,54 @@ button:disabled {
   font-weight: 800;
 }
 
+.review-summary {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summary-item {
+  min-height: 66px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+.summary-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.summary-item strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.active-filters {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.active-filters span {
+  border: 1px solid #e2e2e2;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
 .answer-panel {
   margin-top: 18px;
   border: 1px solid #f0c7c9;
@@ -488,6 +557,34 @@ button:disabled {
   font-weight: 700;
 }
 
+.signals {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.signal span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.signal-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eeeeee;
+}
+
+.signal-track div {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
 .tags {
   display: flex;
   gap: 6px;
@@ -552,7 +649,9 @@ button:disabled {
   }
 
   .mode-control,
-  .filter-grid {
+  .filter-grid,
+  .review-summary,
+  .signals {
     grid-template-columns: 1fr;
   }
 }

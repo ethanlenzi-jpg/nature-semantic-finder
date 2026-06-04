@@ -277,6 +277,11 @@ def rank(query, papers, filters=None):
         reasons.append("comes from Springer Nature metadata")
         paper = dict(paper)
         paper["score"] = round(clamp(score, 0, 1), 3)
+        paper["signals"] = {
+            "text": round(clamp(text_score, 0, 1), 2),
+            "evidence": round(abstract_depth, 2),
+            "citations": round(citation_signal, 2),
+        }
         paper["relevance"] = "; ".join(reasons) or "related by metadata and venue context"
         ranked.append(paper)
     return sorted(ranked, key=lambda item: item["score"], reverse=True)
@@ -440,6 +445,7 @@ class Handler(BaseHTTPRequestHandler):
             "rankingMode": "Springer Nature exact-word ranking" if filters.get("mode") == "keywords" else "Springer Nature semantic ranking",
             "totalCandidates": len(unique),
             "sourceErrors": source_errors,
+            "filters": filters,
             "answer": answer,
             "results": results,
         })

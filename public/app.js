@@ -15,6 +15,8 @@ const proxyPrefix = document.querySelector("#proxyPrefix");
 const button = document.querySelector("#searchButton");
 const results = document.querySelector("#results");
 const message = document.querySelector("#message");
+const reviewSummary = document.querySelector("#reviewSummary");
+const activeFilters = document.querySelector("#activeFilters");
 const answerPanel = document.querySelector("#answerPanel");
 const resultTitle = document.querySelector("#resultTitle");
 const candidateCount = document.querySelector("#candidateCount");
@@ -33,6 +35,13 @@ citationWeightValue.textContent = `${citationWeight.value}%`;
 
 citationWeight.addEventListener("input", () => {
   citationWeightValue.textContent = `${citationWeight.value}%`;
+});
+
+document.querySelectorAll("[data-sample-query]").forEach((sampleButton) => {
+  sampleButton.addEventListener("click", () => {
+    question.value = sampleButton.dataset.sampleQuery;
+    question.focus();
+  });
 });
 
 springerApiKey.addEventListener("input", () => {
@@ -81,6 +90,10 @@ form.addEventListener("submit", async (event) => {
   button.disabled = true;
   button.textContent = "Searching...";
   results.innerHTML = "";
+  reviewSummary.hidden = true;
+  reviewSummary.innerHTML = "";
+  activeFilters.hidden = true;
+  activeFilters.innerHTML = "";
   answerPanel.hidden = true;
   answerPanel.innerHTML = "";
   resultTitle.textContent = "Searching Springer Nature records";
@@ -93,8 +106,11 @@ form.addEventListener("submit", async (event) => {
     modePill.textContent = sentenceCase(data.rankingMode);
     resultTitle.textContent = data.results.length ? "Most relevant Nature records" : "No matching Nature records found";
     candidateCount.textContent = `${data.totalCandidates} candidates`;
+    const demoNote = data.isDemo ? " Prototype demo records are shown until a Springer Nature API key is added." : "";
     const warnings = data.sourceErrors?.length ? ` Some sources reported issues: ${data.sourceErrors.join(" | ")}` : "";
-    showMessage(`${sentenceCase(data.rankingMode)} used across Springer Nature metadata and available abstracts. Open article links on nature.com for the publisher experience.${warnings}`, Boolean(data.sourceErrors?.length && !data.results.length));
+    showMessage(`${sentenceCase(data.rankingMode)} used across Springer Nature metadata and available abstracts. Open article links on nature.com for the publisher experience.${demoNote}${warnings}`, Boolean(data.sourceErrors?.length && !data.results.length));
+    renderReviewSummary(data);
+    renderActiveFilters(data.filters || getFilters());
     renderAnswer(data.answer || buildClientAnswer(query, data.results || []));
     renderResults(data.results);
   } catch (error) {
@@ -121,6 +137,7 @@ function renderResults(papers) {
     const citations = Number(paper.citationCount || 0);
     const citationText = citations > 0 ? `${citations.toLocaleString()} citations` : "";
     const tags = [...new Set([paper.source, paper.openAccess ? "Open access" : "", paper.articleType || "", citationText, ...paper.concepts.slice(0, 4)].filter(Boolean))];
+    const signals = paper.signals || {};
 
     card.innerHTML = `
       <div class="paper-top">
@@ -129,6 +146,7 @@ function renderResults(papers) {
       </div>
       <p class="meta">${escapeHtml(venue)} · ${escapeHtml(String(date))} · ${escapeHtml(authors)}</p>
       <p class="reason">${escapeHtml(paper.relevance || "Ranked as conceptually relevant.")}</p>
+      ${renderSignals(signals)}
       <p class="abstract">${escapeHtml(abstract)}</p>
       <div class="article-actions">
         <a href="${escapeAttribute(href)}" target="_blank" rel="noreferrer">Open article</a>
@@ -155,7 +173,11 @@ async function searchArticles(query) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload)
       });
-      if (response.ok) return await response.json();
+      if (response.ok) {
+        const data = await response.json();
+        if (!payload.springerApiKey && !data.results?.length) return staticSearch(query, payload);
+        return data;
+      }
     } catch {
       // GitHub Pages does not run the Python backend, so static mode takes over there.
     }
@@ -166,16 +188,20 @@ async function searchArticles(query) {
 
 async function staticSearch(query, payload) {
   const sourceErrors = [];
-  const settled = await Promise.allSettled([
-    searchSpringerBrowser(query, payload.limit, payload.springerApiKey)
-  ]);
   let papers = [];
-  for (const result of settled) {
-    if (result.status === "fulfilled") {
-      papers = papers.concat(result.value);
-    } else {
-      sourceErrors.push(result.reason?.message || "A source could not be reached.");
+  if (payload.springerApiKey) {
+    const settled = await Promise.allSettled([
+      searchSpringerBrowser(query, payload.limit, payload.springerApiKey)
+    ]);
+    for (const result of settled) {
+      if (result.status === "fulfilled") {
+        papers = papers.concat(result.value);
+      } else {
+        sourceErrors.push(result.reason?.message || "A source could not be reached.");
+      }
     }
+  } else {
+    papers = getDemoRecords();
   }
 
   const unique = applyFilters(uniqueBy(papers, (paper) => (paper.doi || paper.title || "").toLowerCase()), payload.filters);
@@ -186,6 +212,8 @@ async function staticSearch(query, payload) {
     rankingMode: payload.filters.mode === "keywords" ? "Springer Nature exact-word ranking" : "Springer Nature semantic ranking",
     totalCandidates: unique.length,
     sourceErrors,
+    filters: payload.filters,
+    isDemo: !payload.springerApiKey,
     answer: buildClientAnswer(query, ranked),
     results: ranked
   };
@@ -290,9 +318,64 @@ function rankPapers(query, papers, filters = getFilters()) {
     return {
       ...paper,
       score: Number(clamp(score, 0, 1).toFixed(3)),
+      signals: {
+        text: Number(clamp(textScore, 0, 1).toFixed(2)),
+        evidence: Number(abstractDepth.toFixed(2)),
+        citations: Number(citationSignal.toFixed(2))
+      },
       relevance: explainStaticRelevance(queryTokens, paper, filters)
     };
   }).sort((a, b) => b.score - a.score);
+}
+
+function renderReviewSummary(data) {
+  const filters = data.filters || getFilters();
+  const values = [
+    ["Source", data.isDemo ? "Demo records" : "Springer Nature"],
+    ["Mode", filters.mode === "keywords" ? "Exact words" : "Semantic"],
+    ["Candidates", String(data.totalCandidates || 0)],
+    ["Citation weight", `${filters.citationWeight || 0}%`]
+  ];
+  reviewSummary.innerHTML = values.map(([label, value]) => `
+    <div class="summary-item">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `).join("");
+  reviewSummary.hidden = false;
+}
+
+function renderActiveFilters(filters) {
+  const chips = [
+    filters.author ? `Author: ${filters.author}` : "",
+    filters.journal ? `Journal: ${filters.journal}` : "",
+    filters.fromYear ? `From ${filters.fromYear}` : "",
+    filters.toYear ? `To ${filters.toYear}` : "",
+    filters.articleType ? `Type: ${filters.articleType}` : "",
+    filters.openAccessOnly ? "Open access" : ""
+  ].filter(Boolean);
+  activeFilters.innerHTML = chips.length
+    ? chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join("")
+    : "<span>No filters applied</span>";
+  activeFilters.hidden = false;
+}
+
+function renderSignals(signals) {
+  const rows = [
+    ["Text match", signals.text ?? 0],
+    ["Evidence", signals.evidence ?? 0],
+    ["Citations", signals.citations ?? 0]
+  ];
+  return `
+    <div class="signals">
+      ${rows.map(([label, value]) => `
+        <div class="signal">
+          <span>${escapeHtml(label)}</span>
+          <div class="signal-track"><div style="width: ${Math.round(clamp(value, 0, 1) * 100)}%"></div></div>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function explainStaticRelevance(queryTokens, paper, filters = getFilters()) {
@@ -334,6 +417,96 @@ function applyFilters(papers, filters) {
 
 function includesLoose(value, needle) {
   return String(value || "").toLowerCase().includes(String(needle || "").toLowerCase());
+}
+
+function getDemoRecords() {
+  return [
+    {
+      id: "demo-microbiome-immunotherapy",
+      title: "Demo record: microbiome composition and checkpoint inhibitor response",
+      abstract: "This prototype record represents a Nature-style article about how gut microbial diversity, intestinal metabolites and immune tone can affect checkpoint inhibitor response. It highlights that patient stratification may benefit from connecting microbiome features with tumour immunology and treatment outcomes.",
+      year: 2025,
+      date: "2025-04-15",
+      venue: "Nature Medicine",
+      publisher: "Springer Nature",
+      doi: "",
+      url: "https://www.nature.com/search?q=microbiome%20checkpoint%20inhibitor%20response",
+      authors: ["Springer Nature demo"],
+      citationCount: 248,
+      openAccess: false,
+      articleType: "research",
+      concepts: ["Microbiome", "Immunotherapy", "Cancer"],
+      source: "Prototype demo record"
+    },
+    {
+      id: "demo-crispr-delivery",
+      title: "Demo record: delivery systems for therapeutic CRISPR editing",
+      abstract: "This prototype record represents a Nature-style review of viral vectors, lipid nanoparticles and tissue-targeted delivery systems for therapeutic genome editing. It emphasizes the trade-off between editing efficiency, immune response, tissue specificity and clinical manufacturability.",
+      year: 2024,
+      date: "2024-10-08",
+      venue: "Nature Biotechnology",
+      publisher: "Springer Nature",
+      doi: "",
+      url: "https://www.nature.com/search?q=CRISPR%20delivery%20therapeutic%20gene%20editing",
+      authors: ["Springer Nature demo"],
+      citationCount: 521,
+      openAccess: false,
+      articleType: "review",
+      concepts: ["CRISPR", "Gene editing", "Drug delivery"],
+      source: "Prototype demo record"
+    },
+    {
+      id: "demo-climate-resilience",
+      title: "Demo record: climate extremes and ecosystem resilience",
+      abstract: "This prototype record represents a Nature-style article connecting heatwaves, drought, biodiversity loss and ecosystem resilience. It suggests that repeated climate extremes can reduce recovery capacity when physiological stress and community turnover occur together.",
+      year: 2026,
+      date: "2026-01-22",
+      venue: "Nature Climate Change",
+      publisher: "Springer Nature",
+      doi: "",
+      url: "https://www.nature.com/search?q=climate%20extremes%20ecosystem%20resilience",
+      authors: ["Springer Nature demo"],
+      citationCount: 132,
+      openAccess: true,
+      articleType: "research",
+      concepts: ["Climate change", "Ecology", "Resilience"],
+      source: "Prototype demo record"
+    },
+    {
+      id: "demo-single-cell-atlas",
+      title: "Demo record: single-cell atlases for disease mechanism discovery",
+      abstract: "This prototype record represents a Nature-style methods article about using single-cell atlases to map cell states, signalling interactions and disease-associated tissue niches. It emphasizes how reference atlases can improve target discovery and interpretation of patient samples.",
+      year: 2023,
+      date: "2023-09-05",
+      venue: "Nature Methods",
+      publisher: "Springer Nature",
+      doi: "",
+      url: "https://www.nature.com/search?q=single-cell%20atlas%20disease%20mechanism",
+      authors: ["Springer Nature demo"],
+      citationCount: 389,
+      openAccess: true,
+      articleType: "research",
+      concepts: ["Single-cell", "Disease mechanisms", "Methods"],
+      source: "Prototype demo record"
+    },
+    {
+      id: "demo-ai-drug-discovery",
+      title: "Demo record: artificial intelligence for molecular design",
+      abstract: "This prototype record represents a Nature-style review of machine learning systems for molecular generation, protein structure analysis and drug discovery prioritization. It highlights that prospective validation and uncertainty estimates are essential for reliable deployment.",
+      year: 2025,
+      date: "2025-07-18",
+      venue: "Nature Reviews Drug Discovery",
+      publisher: "Springer Nature",
+      doi: "",
+      url: "https://www.nature.com/search?q=artificial%20intelligence%20molecular%20design%20drug%20discovery",
+      authors: ["Springer Nature demo"],
+      citationCount: 704,
+      openAccess: false,
+      articleType: "review",
+      concepts: ["Artificial intelligence", "Drug discovery", "Molecular design"],
+      source: "Prototype demo record"
+    }
+  ];
 }
 
 function renderAnswer(answer) {
