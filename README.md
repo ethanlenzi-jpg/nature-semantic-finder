@@ -1,6 +1,6 @@
-# Nature Semantic Finder
+# Nature.com Semantic Search Prototype
 
-A local first version of a research-question search tool. It gathers candidate papers from public scholarly metadata sources, optionally includes Springer Nature metadata when an API key is available, and ranks results by conceptual relevance rather than simple keyword matching.
+A proposal prototype for a semantic search layer on nature.com. It searches Springer Nature metadata, ranks article records by conceptual relevance to a research question, and generates an evidence-linked answer from available abstracts.
 
 ## Run
 
@@ -41,11 +41,7 @@ git push -u origin main
 
 The Pages version is static. It can search public metadata directly from the browser, and it can test a Springer Nature API key from the browser. The local Python server is still better for development and for avoiding browser API/CORS limits.
 
-## Optional Semantic Ranking
-
-The app works without paid services using hybrid metadata ranking. For stronger semantic ranking, enable OpenAI embeddings in the interface and paste an API key. The key is stored only in your browser's local storage and is not written into project files.
-
-## Optional Springer Nature Metadata
+## Springer Nature Metadata
 
 If you have a Springer Nature API key, start the app like this:
 
@@ -53,4 +49,4 @@ If you have a Springer Nature API key, start the app like this:
 SPRINGER_NATURE_API_KEY=your_api_key python3 server.py
 ```
 
-The app will then add Springer Nature metadata results to the candidate pool. Browser subscription passwords are intentionally not stored or automated by this app.
+The app uses Springer Nature metadata only. Browser subscription passwords are intentionally not stored or automated by this app.

@@ -170,7 +170,7 @@ def normalize_springer(record):
 def search_springer_nature(query, limit, api_key):
     api_key = (api_key or os.environ.get("SPRINGER_NATURE_API_KEY") or os.environ.get("SPRINGER_API_KEY") or "").strip()
     if not api_key:
-        return []
+        raise ValueError("Add a Springer Nature API key to search live Nature records.")
     params = urlencode({
         "q": query,
         "p": str(min(limit, 100)),
@@ -364,16 +364,10 @@ class Handler(BaseHTTPRequestHandler):
         springer_api_key = (payload.get("springerApiKey") or "").strip()
         source_errors = []
         papers = []
-        searches = (
-            lambda term, count: search_springer_nature(term, count, springer_api_key),
-            search_openalex,
-            search_semantic_scholar,
-        )
-        for search in searches:
-            try:
-                papers.extend(search(query, min(limit, 50)))
-            except Exception as error:
-                source_errors.append(str(error))
+        try:
+            papers.extend(search_springer_nature(query, min(limit, 50), springer_api_key))
+        except Exception as error:
+            source_errors.append(str(error))
 
         seen = set()
         unique = []
@@ -383,16 +377,11 @@ class Handler(BaseHTTPRequestHandler):
                 seen.add(key)
                 unique.append(paper)
 
-        if payload.get("natureOnly"):
-            unique = [paper for paper in unique if is_nature_family(paper)]
-        else:
-            unique.sort(key=lambda paper: int(is_nature_family(paper)), reverse=True)
-
         results = rank(query, unique)[:20]
         answer = build_answer(query, results)
         self.send_json(200, {
             "query": query,
-            "rankingMode": "hybrid metadata ranking",
+            "rankingMode": "Springer Nature metadata ranking",
             "totalCandidates": len(unique),
             "sourceErrors": source_errors,
             "answer": answer,

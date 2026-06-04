@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Nature Semantic Finder</title>
+    <title>Nature.com Semantic Search Prototype</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -11,35 +11,20 @@
       <section class="search-panel">
         <div class="brand-row">
           <div>
-            <p class="eyebrow">Research article finder</p>
-            <h1>Nature Semantic Finder</h1>
+            <p class="eyebrow">Proposal prototype</p>
+            <h1>Semantic search for nature.com</h1>
+            <p class="product-copy">A concept search layer for Springer Nature journals: ask a research question, get relevant Nature articles, and see evidence linked to source records.</p>
           </div>
-          <div class="status-pill" id="modePill">Hybrid metadata ranking</div>
+          <div class="status-pill" id="modePill">Springer Nature only</div>
         </div>
 
         <form id="searchForm">
-          <label for="question">Research question</label>
+          <label for="question">Question for Nature journals</label>
           <textarea id="question" name="question" rows="4" placeholder="Example: How does gut microbiome diversity affect checkpoint inhibitor response?"></textarea>
 
-          <div class="controls">
-            <label class="toggle">
-              <input type="checkbox" id="natureOnly" checked>
-              <span>Nature-family only</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="useEmbeddings">
-              <span>Use OpenAI semantic embeddings</span>
-            </label>
-          </div>
-
-          <div class="key-row" id="keyRow" hidden>
-            <label for="openAiKey">OpenAI API key</label>
-            <input id="openAiKey" type="password" autocomplete="off" placeholder="Stored only in this browser">
-          </div>
-
-          <details class="access-box">
-            <summary>Nature access</summary>
-            <p>This app cannot unlock paywalled Nature text with your account password. Use article links after signing in on nature.com, or add an API key/proxy if your institution provides one.</p>
+          <details class="access-box" open>
+            <summary>Springer Nature access</summary>
+            <p>This demo uses Springer Nature metadata only. Add a Springer Nature API key to test the concept against live article records.</p>
             <label for="springerApiKey">Springer Nature API key</label>
             <div class="api-key-row">
               <input id="springerApiKey" type="password" autocomplete="off" placeholder="Optional; stored only in this browser">
@@ -51,19 +36,19 @@
             <a class="login-link" href="https://www.nature.com/nams/svc/login" target="_blank" rel="noreferrer">Sign in on Nature</a>
           </details>
 
-          <button type="submit" id="searchButton">Find articles</button>
+          <button type="submit" id="searchButton">Search Nature journals</button>
         </form>
       </section>
 
       <section class="results-shell">
         <div class="results-header">
           <div>
-            <p class="eyebrow">Ranked results</p>
+            <p class="eyebrow">Nature.com results</p>
             <h2 id="resultTitle">Ask a question to begin</h2>
           </div>
           <div class="candidate-count" id="candidateCount"></div>
         </div>
-        <div id="message" class="message">Results include article links you can open after signing in to Nature in this browser.</div>
+        <div id="message" class="message">Results are drawn from Springer Nature metadata and link back to article pages on nature.com or DOI records.</div>
         <section id="answerPanel" class="answer-panel" hidden></section>
         <div id="results" class="results"></div>
       </section>

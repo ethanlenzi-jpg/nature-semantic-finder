@@ -1,9 +1,5 @@
 const form = document.querySelector("#searchForm");
 const question = document.querySelector("#question");
-const natureOnly = document.querySelector("#natureOnly");
-const useEmbeddings = document.querySelector("#useEmbeddings");
-const keyRow = document.querySelector("#keyRow");
-const openAiKey = document.querySelector("#openAiKey");
 const springerApiKey = document.querySelector("#springerApiKey");
 const testSpringerKey = document.querySelector("#testSpringerKey");
 const springerKeyStatus = document.querySelector("#springerKeyStatus");
@@ -23,19 +19,8 @@ if (window.location.protocol === "file:") {
   button.disabled = true;
 }
 
-openAiKey.value = localStorage.getItem("natureFinderOpenAiKey") || "";
 springerApiKey.value = localStorage.getItem("natureFinderSpringerApiKey") || "";
 proxyPrefix.value = localStorage.getItem("natureFinderProxyPrefix") || "";
-useEmbeddings.checked = Boolean(openAiKey.value);
-keyRow.hidden = !useEmbeddings.checked;
-
-useEmbeddings.addEventListener("change", () => {
-  keyRow.hidden = !useEmbeddings.checked;
-});
-
-openAiKey.addEventListener("input", () => {
-  localStorage.setItem("natureFinderOpenAiKey", openAiKey.value.trim());
-});
 
 springerApiKey.addEventListener("input", () => {
   localStorage.setItem("natureFinderSpringerApiKey", springerApiKey.value.trim());
@@ -87,16 +72,16 @@ form.addEventListener("submit", async (event) => {
   answerPanel.innerHTML = "";
   resultTitle.textContent = "Searching article databases";
   candidateCount.textContent = "";
-  showMessage("Gathering candidate papers, then ranking them by conceptual fit.");
+  showMessage("Searching Springer Nature metadata, then ranking records by conceptual fit.");
 
   try {
     const data = await searchArticles(query);
 
     modePill.textContent = sentenceCase(data.rankingMode);
-    resultTitle.textContent = data.results.length ? "Most relevant articles" : "No matching articles found";
+    resultTitle.textContent = data.results.length ? "Most relevant Nature records" : "No matching Nature records found";
     candidateCount.textContent = `${data.totalCandidates} candidates`;
     const warnings = data.sourceErrors?.length ? ` Some sources reported issues: ${data.sourceErrors.join(" | ")}` : "";
-    showMessage(`${sentenceCase(data.rankingMode)} used across available metadata and abstracts. Open an article link after signing in to Nature to use your subscription.${warnings}`, Boolean(data.sourceErrors?.length && !data.results.length));
+    showMessage(`${sentenceCase(data.rankingMode)} used across Springer Nature metadata and available abstracts. Open article links on nature.com for the publisher experience.${warnings}`, Boolean(data.sourceErrors?.length && !data.results.length));
     renderAnswer(data.answer || buildClientAnswer(query, data.results || []));
     renderResults(data.results);
   } catch (error) {
@@ -143,8 +128,6 @@ function renderResults(papers) {
 async function searchArticles(query) {
   const payload = {
     query,
-    natureOnly: natureOnly.checked,
-    openAiKey: useEmbeddings.checked ? openAiKey.value.trim() : "",
     springerApiKey: springerApiKey.value.trim(),
     limit: 60
   };
@@ -168,7 +151,6 @@ async function searchArticles(query) {
 async function staticSearch(query, payload) {
   const sourceErrors = [];
   const settled = await Promise.allSettled([
-    searchOpenAlexBrowser(query, payload.limit),
     searchSpringerBrowser(query, payload.limit, payload.springerApiKey)
   ]);
   let papers = [];
@@ -180,17 +162,12 @@ async function staticSearch(query, payload) {
     }
   }
 
-  let unique = uniqueBy(papers, (paper) => (paper.doi || paper.title || "").toLowerCase());
-  if (payload.natureOnly) {
-    unique = unique.filter(isNatureFamily);
-  } else {
-    unique.sort((a, b) => Number(isNatureFamily(b)) - Number(isNatureFamily(a)));
-  }
+  const unique = uniqueBy(papers, (paper) => (paper.doi || paper.title || "").toLowerCase());
 
   const ranked = rankPapers(query, unique).slice(0, 20);
   return {
     query,
-    rankingMode: "static metadata ranking",
+    rankingMode: "Springer Nature metadata ranking",
     totalCandidates: unique.length,
     sourceErrors,
     answer: buildClientAnswer(query, ranked),
@@ -236,19 +213,8 @@ async function testSpringerKeyBrowser(apiKey) {
   };
 }
 
-async function searchOpenAlexBrowser(query, limit) {
-  const url = new URL("https://api.openalex.org/works");
-  url.searchParams.set("search", query);
-  url.searchParams.set("per-page", String(Math.min(limit, 80)));
-  url.searchParams.set("select", "id,doi,title,display_name,publication_year,publication_date,authorships,primary_location,abstract_inverted_index,cited_by_count,concepts,open_access,type");
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`OpenAlex returned HTTP ${response.status}.`);
-  const data = await response.json();
-  return (data.results || []).map(normalizeOpenAlexBrowser);
-}
-
 async function searchSpringerBrowser(query, limit, apiKey) {
-  if (!apiKey) return [];
+  if (!apiKey) throw new Error("Add a Springer Nature API key to search live Nature records.");
   const url = new URL("https://api.springernature.com/meta/v2/json");
   url.searchParams.set("q", query);
   url.searchParams.set("p", String(Math.min(limit, 100)));
@@ -257,26 +223,6 @@ async function searchSpringerBrowser(query, limit, apiKey) {
   if (!response.ok) throw new Error(`Springer Nature returned HTTP ${response.status}.`);
   const data = await response.json();
   return (data.records || []).map(normalizeSpringerBrowser);
-}
-
-function normalizeOpenAlexBrowser(work) {
-  const source = work.primary_location?.source || {};
-  return {
-    id: work.doi || work.id,
-    title: work.title || work.display_name || "Untitled article",
-    abstract: abstractFromInvertedIndex(work.abstract_inverted_index),
-    year: work.publication_year,
-    date: work.publication_date,
-    venue: source.display_name || "",
-    publisher: source.publisher || "",
-    doi: work.doi || "",
-    url: work.doi || work.primary_location?.landing_page_url || work.id || "",
-    authors: (work.authorships || []).slice(0, 6).map((entry) => entry.author?.display_name).filter(Boolean),
-    citationCount: work.cited_by_count || 0,
-    openAccess: Boolean(work.open_access?.is_oa),
-    concepts: (work.concepts || []).slice(0, 8).map((concept) => concept.display_name).filter(Boolean),
-    source: "OpenAlex"
-  };
 }
 
 function normalizeSpringerBrowser(record) {
@@ -297,7 +243,7 @@ function normalizeSpringerBrowser(record) {
     citationCount: 0,
     openAccess: String(record.openaccess || "").toLowerCase() === "true",
     concepts: [record.subject, record.articleType].filter(Boolean),
-    source: "Springer Nature"
+    source: "Springer Nature metadata"
   };
 }
 
@@ -312,7 +258,7 @@ function rankPapers(query, papers) {
     const abstractDepth = clamp((paper.abstract || "").length / 900, 0, 1);
     const citationSignal = clamp(Math.log10((paper.citationCount || 0) + 1) / 4, 0, 1);
     const recencySignal = paper.year ? clamp((paper.year - 2000) / 26, 0, 1) : 0;
-    const natureBoost = isNatureFamily(paper) ? 0.15 : 0;
+    const natureBoost = 0.15;
     const score =
       clamp(overlap / Math.max(8, queryTokens.size), 0, 1) * 0.55 +
       clamp(titleOverlap / Math.max(3, queryTokens.size), 0, 1) * 0.18 +
@@ -334,7 +280,7 @@ function explainStaticRelevance(queryTokens, paper) {
   const reasons = [];
   if (matched.length) reasons.push(`matches concepts around ${matched.join(", ")}`);
   if (paper.abstract) reasons.push("has abstract-level evidence for screening");
-  if (isNatureFamily(paper)) reasons.push("comes from a Nature-family venue");
+  reasons.push("comes from Springer Nature metadata");
   return reasons.join("; ") || "related by metadata and venue context";
 }
 
