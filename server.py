@@ -66,6 +66,10 @@ def is_nature_family(paper):
     return any(pattern.search(venue) for pattern in NATURE_PATTERNS)
 
 
+def is_nature_record(paper):
+    return is_nature_family(paper) or "nature.com" in f"{paper.get('url', '')} {paper.get('doi', '')}".lower()
+
+
 def abstract_from_index(index):
     if not index:
         return ""
@@ -436,7 +440,7 @@ class Handler(BaseHTTPRequestHandler):
                 seen.add(key)
                 unique.append(paper)
 
-        unique = apply_filters(unique, filters)
+        unique = apply_filters([paper for paper in unique if is_nature_record(paper)], filters)
 
         results = rank(query, unique, filters)[:20]
         answer = build_answer(query, results)
